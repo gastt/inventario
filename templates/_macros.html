@@ -1,0 +1,7 @@
+{% macro short_date(ts) -%}
+{%- if ts and ts|length > 9 -%}
+{{ ts[8:10] }}/{{ ts[5:7] }}/{{ ts[0:4] }}
+{%- else -%}
+{{ ts or "-" }}
+{%- endif -%}
+{%- endmacro %}

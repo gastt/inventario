@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Historial de reparaciones" %}
+{% set active="repairs_history" %}
+{% block content %}
+<div class="card">
+  <h2>Historial de reparaciones</h2>
+  <div class="muted">Incluye envíos y retornos. Podés filtrar por equipo, proveedor y fechas.</div>
+  <hr class="sep">
+  <form method="get">
+    <div style="grid-column:1/-1;">
+      <label>Búsqueda (descripción / serial / barcode)</label>
+      <input name="q" value="{{ q }}" placeholder="Ej: notebook, SN123, 123456...">
+    </div>
+    <div class="grid two" style="margin-top:10px;">
+      <div>
+        <label>Tipo</label>
+        <select name="tipo">
+          <option value="">(Todos)</option>
+          {% for t in tipos %}
+            <option value="{{ t }}" {% if tipo==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Proveedor</label>
+        <input name="proveedor" list="provList" value="{{ proveedor }}" placeholder="(opcional)">
+        <datalist id="provList">
+          {% for p in provs %}<option value="{{ p }}">{% endfor %}
+        </datalist>
+      </div>
+      <div>
+        <label>Marca</label>
+        <input name="marca" value="{{ marca }}" placeholder="Dell, HP...">
+      </div>
+      <div>
+        <label>Modelo</label>
+        <input name="modelo" value="{{ modelo }}" placeholder="G6, 840 G5...">
+      </div>
+      <div>
+        <label>Desde</label>
+        <input type="date" name="from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label>Hasta</label>
+        <input type="date" name="to" value="{{ date_to or '' }}">
+      </div>
+    </div>
+    <div style="grid-column:1/-1; display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn" href="{{ url_for('repairs_history_page') }}">Limpiar</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Resultados</h2>
+  <div class="table-wrap">
+    <table style="min-width:1100px;">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Acción</th><th>Equipo</th><th>Serial</th><th>Proveedor</th><th>Detalle/Motivo</th><th>Usuario</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="muted">{{ short_date(r.created_at) }}</td>
+          <td><span class="badge">{{ r.type }}</span></td>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ r.unit_id }}"><b>{{ r.descripcion }}</b></a>
+              <div class="muted">{{ r.marca }} · {{ r.modelo }} · {{ r.tipo }}</div></td>
+          <td>{% if r.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ r.unit_id }}"><span class="badge mono">{{ r.serial }}</span></a>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>{% if r.proveedor %}<span class="badge">{{ r.proveedor }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>{{ r.detalle or "-" }}</td>
+          <td class="muted">{{ r.username or "-" }}</td>
+        </tr>
+        {% endfor %}
+        {% if not rows %}
+        <tr><td colspan="7" class="muted">Sin resultados.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Proveedores" %}
+{% set active="providers" %}
+
+{% block content %}
+<div class="card">
+  <h2>Proveedores</h2>
+  <div class="muted">Gestioná proveedores para compras y reparaciones.</div>
+  <hr class="sep">
+
+  {% if me.is_admin %}
+  <form id="provCreate">
+    <div class="grid two">
+      <div style="grid-column:1/-1;">
+        <label>Nombre *</label>
+        <input name="nombre" required placeholder="Ej: TechService SRL">
+      </div>
+      <div>
+        <label>Dirección</label>
+        <input name="direccion" placeholder="(opcional)">
+      </div>
+      <div>
+        <label>Datos de contacto</label>
+        <input name="contacto" placeholder="(opcional)">
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Agregar</button>
+      <span class="muted" id="provMsg"></span>
+    </div>
+  </form>
+  {% else %}
+    <div class="muted">Solo administradores pueden crear/editar/eliminar proveedores.</div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Listado</h2>
+  <div class="table-wrap">
+    <table style="min-width:900px;">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Dirección</th>
+          <th>Contacto</th>
+          <th style="width:140px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in rows %}
+        <tr>
+          <td><b>{{ p.nombre }}</b></td>
+          <td class="muted">{{ p.direccion or "-" }}</td>
+          <td>{{ p.contacto or "-" }}</td>
+          <td style="white-space:nowrap;">
+            {% if me.is_admin %}
+              <button type="button" class="btn small js-prov-edit"
+                data-id="{{ p.id }}"
+                data-nombre="{{ p.nombre|e }}"
+                data-direccion="{{ (p.direccion or '')|e }}"
+                data-contacto="{{ (p.contacto or '')|e }}"
+              >Editar</button>
+              <button type="button" class="btn danger small js-prov-del"
+                data-id="{{ p.id }}"
+                data-nombre="{{ p.nombre|e }}"
+              >Eliminar</button>
+            {% else %}
+              <span class="muted">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not rows %}
+        <tr><td colspan="4" class="muted">Sin proveedores.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function postKV(url, data){
+  const fd = new FormData();
+  Object.entries(data||{}).forEach(([k,v])=> fd.append(k, v ?? ""));
+  const res = await fetch(url, { method:"POST", body: fd });
+  const js = await res.json().catch(()=> ({}));
+  if(!res.ok || js.ok===false){ throw new Error(js.error || ("HTTP " + res.status)); }
+  return js;
+}
+
+// Crear
+document.addEventListener("submit", async (e)=>{
+  const f = e.target.closest("#provCreate");
+  if(!f) return;
+  e.preventDefault();
+  const msg = document.getElementById("provMsg");
+  msg.textContent = "Guardando...";
+  try{
+    const data = Object.fromEntries(new FormData(f).entries());
+    await postKV("/api/providers/create", data);
+    msg.textContent = "OK";
+    setTimeout(()=> location.reload(), 200);
+  }catch(err){
+    msg.textContent = "Error: " + err.message;
+  }
+});
+
+// Editar / Eliminar (delegación)
+document.addEventListener("click", async (e)=>{
+  const editBtn = e.target.closest(".js-prov-edit");
+  if(editBtn){
+    e.preventDefault();
+    const id = editBtn.dataset.id;
+    const nombre0 = editBtn.dataset.nombre || "";
+    const dir0 = editBtn.dataset.direccion || "";
+    const cont0 = editBtn.dataset.contacto || "";
+
+    const n = prompt("Nombre del proveedor:", nombre0);
+    if(n===null) return;
+    const d = prompt("Dirección:", dir0);
+    if(d===null) return;
+    const c = prompt("Datos de contacto:", cont0);
+    if(c===null) return;
+
+    try{
+      await postKV("/api/provider_update", {
+        provider_id: id,
+        nombre: (n||"").trim(),
+        direccion: (d||"").trim(),
+        contacto: (c||"").trim(),
+      });
+      location.reload();
+    }catch(err){
+      alert("Error: " + err.message);
+    }
+    return;
+  }
+
+  const delBtn = e.target.closest(".js-prov-del");
+  if(delBtn){
+    e.preventDefault();
+    const id = delBtn.dataset.id;
+    const nombre = delBtn.dataset.nombre || ("ID " + id);
+    if(!confirm("¿Eliminar proveedor '"+nombre+"'?")) return;
+    try{
+      await postKV("/api/providers/delete", { id });
+      location.reload();
+    }catch(err){
+      alert("Error: " + err.message);
+    }
+  }
+});
+</script>
+{% endblock %}

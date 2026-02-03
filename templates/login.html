@@ -1,0 +1,58 @@
+{% from "_macros.html" import short_date %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login · Inventario IT</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .wrap{ min-height: calc(100vh - 0px); display:flex; align-items:center; justify-content:center; padding:16px; }
+    .box{ width: min(520px, 100%); }
+    .hero{ display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    .hero .logo{ width:46px; height:46px; border-radius:16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="box">
+      <div class="hero">
+        <div class="logo"></div>
+        <div>
+          <h1 style="margin:0; font-size:1.1rem;">Inventario IT</h1>
+          <div class="muted">Login para trabajar en red (SQLite central)</div>
+        </div>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for cat,msg in messages %}
+            <div class="flash {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="card">
+        <h2>Ingresar</h2>
+        <form method="post">
+          <div>
+            <label>Usuario</label>
+            <input name="username" autocomplete="username" required placeholder="admin">
+          </div>
+          <div>
+            <label>Contraseña</label>
+            <input name="password" type="password" autocomplete="current-password" required placeholder="admin">
+          </div>
+          <div class="muted" style="grid-column:1/-1;">
+            Usuario inicial: <span class="badge mono">admin</span> / <span class="badge mono">admin</span> (cambiar en panel Usuarios).
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button class="btn primary" type="submit">Entrar</button>
+            <span class="muted">Tip: usá una clave larga en <span class="badge mono">INVENTARIO_SECRET_KEY</span></span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Asignaciones" %}
+{% set active="assignments" %}
+{% block content %}
+<div class="card">
+  <h2>Asignaciones realizadas</h2>
+  <div class="muted">Listado de asignaciones, reasignaciones y reactivaciones asignadas (hasta 1000 más recientes).</div>
+  <hr class="sep">
+  <form method="get">
+    <div style="grid-column:1/-1;">
+      <label>Buscar</label>
+      <input name="q" value="{{ q }}" placeholder="Artículo, serial, sucursal, área, persona, usuario...">
+    <div class="grid two" style="margin-top:10px;">
+      <div><label>Desde</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+      <div><label>Hasta</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+    </div>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn" href="{{ url_for('assignments_page') }}">Limpiar</a>
+      <a class="btn" href="/export/historial.csv">historial.csv</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Movimientos</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Tipo</th><th>Equipo</th><th>Serial</th>
+          <th>Desde</th><th>Hacia</th><th>Usuario</th><th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="muted">{{ short_date(r.created_at) }}</td>
+          <td><span class="badge">{{ r.type }}</span></td>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ r.unit_id }}"><b>{{ r.descripcion }}</b></a><div class="muted">{{ r.marca }} {{ r.modelo }}</div></td>
+          <td>{% if r.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ r.unit_id }}"><span class="badge mono">{{ r.serial }}</span></a>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td class="muted">
+            {{ r.from_sucursal or "-" }}{% if r.from_area %} · {{ r.from_area }}{% endif %}{% if r.from_persona %} · {{ r.from_persona }}{% endif %}
+          </td>
+          <td>
+            {{ r.to_sucursal or "-" }}{% if r.to_area %} · {{ r.to_area }}{% endif %}{% if r.to_persona %} · {{ r.to_persona }}{% endif %}
+          </td>
+          <td class="muted">{{ r.username }}</td>
+          <td>{{ r.detalle }}</td>
+        </tr>
+        {% endfor %}
+        {% if not rows %}
+        <tr><td colspan="8" class="muted">Sin resultados.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

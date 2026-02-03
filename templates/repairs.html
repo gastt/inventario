@@ -1,0 +1,145 @@
+<style>
+/* Tabla "En reparación": layout fijo para que una celda larga no empuje el resto */
+.inrep-table{ table-layout: fixed; width:100%; }
+.inrep-table th, .inrep-table td{ overflow:hidden; }
+.inrep-table td.actions{ white-space:nowrap; }
+
+/* Nueva clase para truncar el motivo con puntos suspensivos */
+.motivo-truncate {
+  display: block;
+  max-width: 23ch; /* Limita a aprox 25 caracteres */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help; /* Indica que hay más texto al pasar el mouse */
+}
+
+/* Motivo: una sola línea, máximo ~23 caracteres visibles, con tooltip */
+.motivo-short{
+  display:inline-block;
+  width:23ch;
+  max-width:23ch;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  vertical-align:bottom;
+}
+</style>
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Reparaciones" %}
+{% set active="repairs" %}
+{% block content %}
+<div class="grid two">
+  <div class="card">
+    <h2>Enviar a reparación</h2>
+    <div class="muted">Panel exclusivo. Cada acción exige detalle (modal).</div>
+    <hr class="sep">
+    <form method="get">
+      <div>
+        <label>Origen</label>
+        <select name="scope">
+          <option value="ANY" {% if scope=='ANY' %}selected{% endif %}>Stock + Asignados</option>
+          <option value="IN_STOCK" {% if scope=='IN_STOCK' %}selected{% endif %}>Solo stock</option>
+          <option value="ASSIGNED" {% if scope=='ASSIGNED' %}selected{% endif %}>Solo asignados</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1;">
+        <label>Filtro</label>
+        <input name="q1" value="{{ q1 }}" placeholder="Serial, descripción, marca, modelo, sucursal...">
+      </div>
+      <div class="grid two" style="margin-top:10px;">
+  <div><label>Desde</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+  <div><label>Hasta</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+</div>
+<div style="display:flex; gap:10px;">
+        </div><div class="form-actions" style="margin-top:10px;"><button class="btn" type="submit">Aplicar</button>
+        <a class="btn" href="{{ url_for('repairs_page') }}">Limpiar</a></div><div>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>En reparación</h2>
+    <form method="get">
+      <input type="hidden" name="scope" value="{{ scope }}">
+      <input type="hidden" name="q1" value="{{ q1 }}">
+      <div style="grid-column:1/-1;">
+        <label>Filtro</label>
+        <input name="q2" value="{{ q2 }}" placeholder="Serial, descripción, marca, modelo...">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn" type="submit">Aplicar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Elegibles para enviar</h2>
+  {% if not q1 %}<div class="muted">Buscá arriba para mostrar resultados (no se listan todos por defecto).</div>{% endif %}
+  <div class="table-wrap">
+    <table class="inrep-table">
+      <thead>
+        <tr><th>Equipo</th><th>Estado</th><th>Serial</th><th>Ubicación</th><th>Acción</th></tr>
+      </thead>
+      <tbody>
+        {% if not send %}
+        <tr><td colspan="5" class="muted">Sin resultados. Usá el filtro de arriba.</td></tr>
+        {% endif %}
+        {% for u in send %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><b>{{ u.descripcion }}</b></a><div class="muted">{{ u.marca }} {{ u.modelo }} · {{ u.tipo }}</div></td>
+          <td>
+            {% if u.status=='IN_STOCK' %}<span class="badge ok">EN STOCK</span>{% endif %}
+            {% if u.status=='ASSIGNED' %}<span class="badge blue">ASIGNADO</span>{% endif %}
+          </td>
+          <td>{% if u.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><span class="badge mono">{{ u.serial }}</span></a>{% else %}<span class="muted">SIN SERIAL</span>{% endif %}</td>
+          <td class="muted">{{ u.sucursal or "-" }}</td>
+          <td>
+            <button class="btn warn small" type="button"
+              onclick="modal.open({action:'repair_send', unitId:'{{ u.id }}', title:'Enviar a reparación', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:false, showProv:true});">Enviar</button>
+            <button class="btn danger small" type="button"
+              onclick="modal.open({action:'retire', unitId:'{{ u.id }}', title:'Dar de baja (obligatorio)', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:false, showProv:false});">Baja</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>En reparación</h2>
+  <div class="table-wrap">
+    <table class="inrep-table">
+      <thead>
+        <tr><th>Equipo</th><th>Serial</th><th>Proveedor</th><th>Motivo</th><th>Última asignación</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for u in inrep %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><b>{{ u.descripcion }}</b></a><div class="muted">{{ u.marca }} {{ u.modelo }} · {{ u.tipo }}</div></td>
+          <td>{% if u.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><span class="badge mono">{{ u.serial }}</span></a>{% else %}<span class="muted">SIN SERIAL</span>{% endif %}</td>
+          <td><span class="badge">{{ u.repair_proveedor or '-' }}</span></td>
+          <td>
+            <span class="motivo-truncate" title="{{ (u.repair_motivo or '-')|e }}">
+              {{ (u.repair_motivo or '-')|lower|capitalize }}
+            </span>
+          </td>
+          <td class="muted">{{ u.last_sucursal or "-" }}{% if u.last_area %} · {{ u.last_area }}{% endif %}{% if u.last_persona %} · {{ u.last_persona }}{% endif %}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn primary small" type="button"
+              onclick="modal.open({action:'repair_return', unitId:'{{ u.id }}', title:'Retorno a stock', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:false, showProv:true});">Volver a stock</button>
+            <button class="btn primary small" type="button"
+              onclick="modal.open({action:'repair_return', unitId:'{{ u.id }}', title:'Retorno a asignación', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:false, showProv:true});">Volver a asignación</button>
+            <button class="btn danger small" type="button"
+              onclick="modal.open({action:'retire', unitId:'{{ u.id }}', title:'Dar de baja (obligatorio)', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:false, showProv:false});">Baja</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

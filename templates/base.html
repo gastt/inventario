@@ -1,0 +1,607 @@
+{% from "_macros.html" import short_date %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ title or "Inventario IT" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<script>
+function shortDate(ts){
+  if(!ts) return "-";
+  try{
+    const s = String(ts);
+    if(s.length >= 10){
+      // ISO: YYYY-MM-DD...
+      return s.slice(8,10) + "/" + s.slice(5,7) + "/" + s.slice(0,4);
+    }
+    return s;
+  }catch(e){
+    return String(ts);
+  }
+}
+</script>
+
+</head>
+<body>
+  <div class="topbar">
+    <div class="nav">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>Inventario IT</h1>
+          <div class="sub">Stock · Asignación · Reasignación · Reparaciones · Bajas</div>
+        </div>
+      </div>
+
+      <div class="menu">
+        {% if me %}
+          <a class="pill {% if active=='stock' %}active{% endif %}" href="{{ url_for('stock') }}">Stock</a>
+          <a class="pill {% if active=='stock_all' %}active{% endif %}" href="{{ url_for('stock_all') }}">Resumen stock</a>
+          <a class="pill {% if active=='assign' %}active{% endif %}" href="{{ url_for('assign_page') }}">Asignar</a>
+          <a class="pill {% if active=='reassign' %}active{% endif %}" href="{{ url_for('reassign_page') }}">Reasignar</a>
+          <a class="pill {% if active=='assigned' %}active{% endif %}" href="{{ url_for('assigned_page') }}">Asignados</a>
+          <a class="pill {% if active=='repairs' %}active{% endif %}" href="{{ url_for('repairs_page') }}">Reparaciones</a>
+          <a class="pill {% if active=='repairs_history' %}active{% endif %}" href="{{ url_for('repairs_history_page') }}">Hist. Reparaciones</a>
+          <a class="pill {% if active=='providers' %}active{% endif %}" href="{{ url_for('providers_page') }}">Proveedores</a>
+        <a class="pill {% if active=='manage_products' %}active{% endif %}" href="{{ url_for('manage_products_page') }}">Gestionar productos</a>
+        <a class="pill {% if active=='inventory' %}active{% endif %}" href="{{ url_for('inventory_page') }}">Inventario</a>
+        <a class="pill {% if active=='ai_chat' %}active{% endif %}" href="{{ url_for('ai_chat_page') }}">Chat IA</a>
+        <a class="pill {% if active=='reports' %}active{% endif %}" href="{{ url_for('reports_page') }}">Reportes</a>
+          <a class="pill {% if active=='retired' %}active{% endif %}" href="{{ url_for('retired_page') }}">Bajas</a>
+          <a class="pill {% if active=='queries' %}active{% endif %}" href="{{ url_for('queries_page') }}">Consultas</a>
+          {% if me.is_admin %}
+            <a class="pill {% if active=='users' %}active{% endif %}" href="{{ url_for('users_page') }}">Usuarios</a>
+          {% endif %}
+          <span class="pill">👤 {{ me.username }}</span>
+          <a class="pill" href="{{ url_for('logout') }}">Salir</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat,msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  
+  <div class="modal-backdrop" id="infoBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <header>
+        <h3 id="iTitle">Detalle</h3>
+        <button class="closex" id="iClose" title="Cerrar">✕</button>
+      </header>
+      <div class="content" id="iBody">
+        <div class="muted">Cargando...</div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="iOk">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+<div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <header>
+        <h3 id="mTitle">Acción</h3>
+        <button class="closex" id="mClose" title="Cerrar">✕</button>
+      </header>
+      <div class="content">
+        <div class="muted" id="mSub"></div>
+        <hr class="sep">
+        <form id="mForm">
+          <input type="hidden" id="mAction">
+          <input type="hidden" id="mUnitId">
+
+          <div id="mRestoreBlock" style="display:none;">
+      <div id="mReturnWrap" style="display:none;">
+        <label>Al volver de reparación</label>
+        <select id="mReturnChoice">
+          <option value="ASSIGNED">Volver a donde estaba (por defecto)</option>
+          <option value="IN_STOCK">Volver a stock</option>
+        </select>
+      </div>
+            <label>Reactivar como</label>
+            <select id="mNewStatus">
+              <option value="IN_STOCK">Volver a stock</option>
+              <option value="ASSIGNED">Asignar nuevamente</option>
+            </select>
+          </div>
+
+          <div id="mLocBlock" style="display:none;">
+            <div class="grid two">
+              <div>
+                <label>Sucursal/Ubicación</label>
+                <input id="mSucursal" placeholder="Ej: Sucursal Centro">
+              </div>
+              <div>
+                <label>Área (opcional)</label>
+                <input id="mArea" placeholder="Ej: Administración">
+              </div>
+              <div>
+                <label>Persona (opcional)</label>
+                <input id="mPersona" placeholder="Ej: Juan Pérez">
+              </div>
+              <div id="mProvWrap">
+                <label>Proveedor (opcional)</label>
+                <select id="mProveedorSel"></select>
+</div>
+            </div>
+          </div>
+
+          <div>
+            <label>Detalle / motivo (obligatorio)</label>
+            <textarea id="mDetalle" placeholder="Escribí el motivo / trabajo realizado..." required></textarea>
+          </div>
+          <div id="mMsg" class="muted" style="margin-top:8px;"></div>
+        </form>
+      </div>
+      <div class="actions">
+        <button class="btn" id="mCancel">Cancelar</button>
+        <button class="btn primary" id="mOk">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ---------- Action modal (estado + detalle obligatorio) ----------
+  const modal = {
+    b: document.getElementById("modalBackdrop"),
+    title: document.getElementById("mTitle"),
+    sub: document.getElementById("mSub"),
+    msg: document.getElementById("mMsg"),
+    action: document.getElementById("mAction"),
+    unitId: document.getElementById("mUnitId"),
+    detalle: document.getElementById("mDetalle"),
+    proveedor: document.getElementById("mProveedorSel"),
+    sucursal: document.getElementById("mSucursal"),
+    area: document.getElementById("mArea"),
+    persona: document.getElementById("mPersona"),
+    restoreBlock: document.getElementById("mRestoreBlock"),
+    newStatus: document.getElementById("mNewStatus"),
+    locBlock: document.getElementById("mLocBlock"),
+    provWrap: document.getElementById("mProvWrap"),
+    open(ctx){
+      this.title.textContent = ctx.title || "Acción";
+      this.sub.innerHTML = ctx.sub || "";
+      this.msg.textContent = "";
+      this.action.value = ctx.action || "";
+      this.unitId.value = ctx.unitId || "";
+      this.detalle.value = "";
+      if(this.proveedor){ this.proveedor.innerHTML = "<option value=\"\">(Seleccionar...)</option>"; }
+      this.sucursal.value = "";
+      this.area.value = "";
+      this.persona.value = "";
+
+      const isRestore = ctx.action === "restore";
+      const isRepairReturn = ctx.action === "repair_return";
+      this.restoreBlock.style.display = (isRestore || isRepairReturn) ? "block" : "none";
+      document.getElementById('mReturnWrap').style.display = isRepairReturn ? 'block' : 'none';
+      document.getElementById('mNewStatus').parentElement.style.display = isRestore ? 'block' : 'none';
+      this.locBlock.style.display = (ctx.showLoc || ctx.showProv) ? "block" : "none";
+      this.provWrap.style.display = ctx.showProv ? "block" : "none";
+      if(ctx.showProv){ loadProvidersDatalist().then(rows=>{ fillProvidersDatalist(rows); fillProvidersSelect(rows); }); }
+      // Si showLoc es falso, ocultar campos de ubicación (sucursal/área/persona) aunque el bloque esté visible por proveedor
+      const locFields = [this.sucursal.parentElement, this.area.parentElement, this.persona.parentElement];
+      locFields.forEach(el => { if (el) el.style.display = ctx.showLoc ? "block" : "none"; });
+
+
+      if (isRestore){
+        this.newStatus.value = "IN_STOCK";
+        const toggle = () => {
+          const wantsAssign = this.newStatus.value === "ASSIGNED";
+          this.sucursal.parentElement.style.display = wantsAssign ? "block" : "none";
+          this.area.parentElement.style.display = wantsAssign ? "block" : "none";
+          this.persona.parentElement.style.display = wantsAssign ? "block" : "none";
+        };
+        this.newStatus.onchange = toggle;
+        toggle();
+      }
+      this.b.style.display = "flex";
+      this.b.setAttribute("aria-hidden","false");
+    },
+    close(){
+      this.b.style.display = "none";
+      this.b.setAttribute("aria-hidden","true");
+    }
+  };
+
+  document.getElementById("mClose").addEventListener("click", ()=>modal.close());
+  document.getElementById("mCancel").addEventListener("click", ()=>modal.close());
+  modal.b.addEventListener("click", (e)=>{ if(e.target.id==="modalBackdrop") modal.close(); });
+
+  // ---------- Info modal (siempre disponible) ----------
+  const info = {
+    b: document.getElementById("infoBackdrop"),
+    title: document.getElementById("iTitle"),
+    body: document.getElementById("iBody"),
+    open(){ this.b.style.display="flex"; this.b.setAttribute("aria-hidden","false"); },
+    close(){ this.b.style.display="none"; this.b.setAttribute("aria-hidden","true"); }
+  };
+  document.getElementById("iClose").addEventListener("click", ()=>info.close());
+  document.getElementById("iOk").addEventListener("click", ()=>info.close());
+  info.b.addEventListener("click", (e)=>{ if(e.target.id==="infoBackdrop") info.close(); });
+
+  document.addEventListener("keydown", (e)=>{
+    if(e.key==="Escape"){
+      modal.close();
+      info.close();
+    }
+  });
+
+  
+  async function loadProvidersDatalist(){
+    if (window.__provCache) return window.__provCache;
+    try{
+      const res = await fetch("/api/providers/list");
+      const js = await res.json();
+      if(js && js.ok){
+        window.__provCache = js.rows || [];
+      } else {
+        window.__provCache = [];
+      }
+    }catch(e){ window.__provCache = []; }
+    return window.__provCache;
+  }
+  function fillProvidersDatalist(rows){
+    const dl = document.getElementById("provList");
+    if(!dl) return;
+    dl.innerHTML = "";
+    (rows||[]).forEach(r=>{
+      const opt = document.createElement("option");
+      opt.value = r.nombre;
+      dl.appendChild(opt);
+    });
+  }
+
+
+  function fillProvidersSelect(rows){
+    const sel = document.getElementById("mProveedorSel");
+    if(!sel) return;
+    sel.innerHTML = '<option value="">(Seleccionar...)</option>' + (rows||[]).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join("");
+  }
+
+function esc(s){
+    if (s == null) return "";
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+  function badgeForStatus(st){
+    if(st==="IN_STOCK") return '<span class="badge ok">EN STOCK</span>';
+    if(st==="ASSIGNED") return '<span class="badge blue">ASIGNADO</span>';
+    if(st==="IN_REPAIR") return '<span class="badge warn">REPARACIÓN</span>';
+    if(st==="RETIRED") return '<span class="badge danger">BAJA</span>';
+    return '<span class="badge">'+esc(st)+'</span>';
+  }
+
+  async function postForm(url, data){
+    const fd = new FormData();
+    Object.entries(data).forEach(([k,v]) => fd.append(k, v ?? ""));
+    const res = await fetch(url, { method:"POST", body: fd });
+    const js = await res.json().catch(()=> ({}));
+    if (!res.ok || js.ok === false){
+      throw new Error(js.error || ("HTTP " + res.status));
+    }
+    return js;
+  }
+
+  async function modalConfirm(){
+    const a = modal.action.value;
+    const unitId = modal.unitId.value;
+    const detalle = modal.detalle.value.trim();
+    const proveedor = modal.proveedor.value.trim();
+    const sucursal = modal.sucursal.value.trim();
+    const area = modal.area.value.trim();
+    const persona = modal.persona.value.trim();
+
+    if (!detalle){
+      modal.msg.textContent = "Detalle obligatorio.";
+      return;
+    }
+    try{
+      if (a === "retire"){
+        await postForm("/api/retire", { unit_id: unitId, detalle });
+      } else if (a === "repair_send"){
+        await postForm("/api/repair_send", { unit_id: unitId, proveedor, detalle });
+      } else if (a === "repair_return"){
+        const choice = document.getElementById('mReturnChoice') ? document.getElementById('mReturnChoice').value : 'ASSIGNED';
+        await postForm("/api/repair_return", { unit_id: unitId, proveedor, detalle, choice });
+      } else if (a === "repair_return_stock"){
+        await postForm("/api/repair_return_stock", { unit_id: unitId, proveedor, detalle });
+      } else if (a === "repair_return_assigned"){
+        await postForm("/api/repair_return_assigned", { unit_id: unitId, proveedor, detalle });
+      } else if (a === "restore"){
+        const newStatus = modal.newStatus.value;
+        await postForm("/api/restore", { unit_id: unitId, new_status: newStatus, sucursal, area, persona, detalle });
+      } else {
+        throw new Error("Acción no implementada.");
+      }
+      modal.close();
+      location.reload();
+    }catch(err){
+      modal.msg.textContent = "Error: " + err.message;
+    }
+  }
+  document.getElementById("mOk").addEventListener("click", modalConfirm);
+
+  
+  async function openProductEdit(productId){
+    info.title.textContent = "Editar artículo";
+    info.body.innerHTML = '<div class="muted">Cargando...</div>';
+    info.open();
+    try{
+      const [resP, resProv] = await Promise.all([
+        fetch("/api/product_info/" + productId),
+        fetch("/api/providers/list")
+      ]);
+      const js = await resP.json();
+      const provs = await resProv.json();
+      if(!resP.ok || js.ok===false) throw new Error(js.error || ("HTTP "+resP.status));
+      const p = js.product;
+      const providerList = (provs.providers || provs.rows || []);
+      const sel = (providerList||[]).map(pr=>`<option value="${esc(String(pr.id))}" ${p.proveedor_id==pr.id?'selected':''}>${esc(pr.nombre)}</option>`).join('');
+      const current = p.proveedor_id ? String(p.proveedor_id) : "0";
+      info.body.innerHTML = ''
+        + '<form id="prodEditForm">'
+        + '<input type="hidden" name="product_id" value="'+esc(String(p.id))+'">'
+        + '<div class="grid two">'
+        + '<div><label>Barcode</label><input name="barcode" value="'+esc(p.barcode||'')+'" placeholder="(opcional)"></div>'
+        + '<div><label>Proveedor</label><select name="proveedor_id"><option value="0">(Sin proveedor)</option>'+sel+'</select></div>'
+        + '<div style="grid-column:1/-1;"><label>Descripción *</label><input name="descripcion" required value="'+esc(p.descripcion||'')+'"></div>'
+        + '<div><label>Tipo *</label><input name="tipo" required value="'+esc(p.tipo||'')+'"></div>'
+        + '<div><label>Marca *</label><input name="marca" required value="'+esc(p.marca||'')+'"></div>'
+        + '<div><label>Modelo *</label><input name="modelo" required value="'+esc(p.modelo||'')+'"></div>'
+        + '</div>'
+        + '<div style="display:flex; gap:10px; margin-top:10px; align-items:center;">'
+        + '<button class="btn primary" type="submit">Guardar cambios</button>'
+        + '<span class="muted" id="peMsg"></span>'
+        + '</div>'
+        + '</form>';
+      const f = document.getElementById("prodEditForm");
+      const msg = document.getElementById("peMsg");
+      f.addEventListener("submit", async (e)=>{
+        e.preventDefault();
+        msg.textContent = "Guardando...";
+        try{
+          const fd = new FormData(f);
+          const res = await fetch("/api/product_update", { method:"POST", body: fd });
+          const js2 = await res.json().catch(()=> ({}));
+          if(!res.ok || js2.ok===false) throw new Error(js2.error || ("HTTP "+res.status));
+          msg.textContent = "OK";
+          setTimeout(()=> location.reload(), 300);
+        }catch(err){
+          msg.textContent = "Error: " + err.message;
+        }
+      });
+    }catch(err){
+      info.body.innerHTML = '<div class="flash error">Error: '+esc(err.message)+'</div>';
+    }
+  }
+
+
+  async function editUnitSerial(unitId, currentSerial){
+    const ns = prompt("Nuevo número de serie (vacío para borrar):", currentSerial||"");
+    if(ns===null) return;
+    try{
+      await postKV("/api/unit_update_serial", { unit_id: unitId, serial: (ns||"").trim() });
+      await openUnitInfo(unitId);
+    }catch(err){
+      alert("Error: " + err.message);
+    }
+  }
+
+async function openUnitInfo(unitId){
+    info.title.textContent = "Equipo";
+    info.body.innerHTML = '<div class="muted">Cargando...</div>';
+    info.open();
+    try{
+      const res = await fetch("/api/unit_info/" + unitId);
+      const js = await res.json();
+      if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+
+      const u = js.unit;
+      const loc = (u.sucursal||"-") + (u.area? " · "+u.area:"") + (u.persona? " · "+u.persona:"");
+      const last = (u.last_sucursal||"-") + (u.last_area? " · "+u.last_area:"") + (u.last_persona? " · "+u.last_persona:"");
+      const serial = u.serial ? '<span class="badge mono">'+esc(u.serial)+'</span>' : '<span class="muted">SIN SERIAL</span>';
+      const barcode = u.barcode ? '<span class="badge mono">'+esc(u.barcode)+'</span>' : '<span class="muted">-</span>';
+      const warranty = u.warranty_until ? '<span class="badge">'+esc(u.warranty_until)+'</span>' : '<span class="muted">-</span>';
+      const prov = js.provider;
+      let provRow = '<span class="muted">-</span>';
+      let provDetails = '';
+      if(prov){
+        provRow = '<a href="#" class="prov-link" data-pid="'+esc(String(prov.id))+'">'+esc(prov.nombre)+'</a>';
+        provDetails = '<div id="provDetails" style="display:none; margin-top:8px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:12px;">'
+          + '<div class="muted" style="margin-bottom:6px;">Proveedor</div>'
+          + '<div><b>'+esc(prov.nombre)+'</b></div>'
+          + '<div class="muted" style="margin-top:6px;">Dirección:</div><div>'+esc(prov.direccion || '-')+'</div>'
+          + '<div class="muted" style="margin-top:6px;">Contacto:</div><div>'+esc(prov.contacto || '-')+'</div>'
+          + '</div>';
+      }
+
+
+      let hist = "";
+      if(js.history && js.history.length){
+        hist += '<div class="table-wrap"><table style="min-width:780px;"><thead><tr>'
+          + '<th>Fecha</th><th>Tipo</th><th>Ubicación</th><th>Usuario</th><th>Detalle</th></tr></thead><tbody>';
+        for(const h of js.history){
+          hist += '<tr><td class="muted">'+esc(shortDate(h.created_at))+'</td>'
+            + '<td><span class="badge">'+esc(h.type)+'</span></td>'
+            + '<td class="muted">'+esc((h.from_sucursal||"-") + (h.from_area?" · "+h.from_area:"") + (h.from_persona?" · "+h.from_persona:"") + "  →  " + (h.to_sucursal||"-") + (h.to_area?" · "+h.to_area:"") + (h.to_persona?" · "+h.to_persona:"") )+'</td>'
+            + '<td class="muted">'+esc(h.username)+'</td>'
+            + '<td>'+esc(h.detalle) + (h.proveedor? ('<div class="muted">Proveedor: '+esc(h.proveedor)+'</div>'):"") + '</td></tr>';
+        }
+        hist += '</tbody></table></div>';
+      } else {
+        hist = '<div class="muted">Sin historial.</div>';
+      }
+
+      info.body.innerHTML =
+        '<div class="grid two">'
+        + '<div class="card" style="margin:0; box-shadow:none;">'
+        + '<h2 style="margin:0 0 8px 0;">'+esc(u.descripcion)+'</h2>'
+        + '<div class="muted">'+esc(u.marca)+' · '+esc(u.modelo)+' · '+esc(u.tipo)+'</div>'
+        + '<hr class="sep">'
+        + '<div style="display:grid; gap:8px;">'
+        + '<div><span class="muted">Estado:</span> '+badgeForStatus(u.status)+'</div>'
+        + '<div><span class="muted">Serial:</span> '+serial+'</div>'
+        + '<div><span class="muted">Barcode:</span> '+barcode+'</div>'
+        + '<div><span class="muted">Nº inventario:</span> '+(u.inventory_number ? '<span class="badge mono">'+esc(u.inventory_number)+'</span>' : '<span class="muted">-</span>')+'</div>'
+        + '<div><span class="muted">Proveedor:</span> '+provRow+provDetails+'</div>'
+        + '<div><span class="muted">Garantía:</span> '+warranty+'</div>'
+        + '<div><span class="muted">Nombre PC:</span> '+(u.pc_name?esc(u.pc_name):'<span class="muted">-</span>')+'</div>'
+        + '<div><span class="muted">Ubicación actual:</span> '+esc(loc)+'</div>'
+        + '<div><span class="muted">Última asignación:</span> '+esc(last)+'</div>'
+        + '</div>'
+        + '</div>'
+        + '<div class="card" style="margin:0; box-shadow:none;">'
+        + '<h2 style="margin:0 0 8px 0;">Historial</h2>'
+        + hist
+        + '</div>'
+        + '</div>';
+
+      // Toggle detalles del proveedor
+      const pl = info.body.querySelector('.prov-link');
+      if(pl){
+        pl.addEventListener('click', (ev)=>{
+          ev.preventDefault();
+          const d = info.body.querySelector('#provDetails');
+          if(d) d.style.display = (d.style.display==='none' || !d.style.display) ? 'block' : 'none';
+        });
+      }
+    }catch(err){
+      info.body.innerHTML = '<div class="flash error">Error: '+esc(err.message)+'</div>';
+    }
+  }
+
+  async function openProductInfo(productId){
+    try{
+      info.title.textContent = "Artículo";
+      info.body.innerHTML = '<div class="muted">Cargando...</div>';
+      info.open();
+
+      const res = await fetch("/api/product_info/" + productId);
+      const js = await res.json();
+      if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+
+      const p = js.product;
+      const counts = js.counts || {};
+      const units = js.units || [];
+      const hist = js.history || [];
+      const prov = js.provider;
+
+      const provRow = prov ? '<a href="#" class="prov-link">'+esc(prov.nombre)+'</a>' : '<span class="muted">-</span>';
+      const provDetails = prov ? (
+        '<div id="provDetails" style="display:none; margin-top:8px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:12px;">'
+          + '<div class="muted" style="margin-bottom:6px;">Proveedor</div>'
+          + '<div><b>'+esc(prov.nombre)+'</b></div>'
+          + '<div class="muted" style="margin-top:6px;">Dirección:</div><div>'+esc(prov.direccion || '-')+'</div>'
+          + '<div class="muted" style="margin-top:6px;">Contacto:</div><div>'+esc(prov.contacto || '-')+'</div>'
+          + '</div>'
+      ) : '';
+
+      const barcode = p.barcode ? '<span class="badge mono">'+esc(p.barcode)+'</span>' : '<span class="muted">-</span>';
+
+      let html = ''
+        + '<div class="grid two">'
+        + '<div>'
+        + '<div style="font-size:18px;"><b>'+esc(p.descripcion)+'</b></div>'
+        + '<div class="muted">'+esc((p.marca||"-")+" · "+(p.modelo||"-"))+'</div>'
+        + '<hr class="sep">'
+        + '<div><span class="muted">Tipo:</span> '+esc(p.tipo||"-")+'</div>'
+        + '<div><span class="muted">Barcode:</span> '+barcode+'</div>'
++ '<div><span class="muted">Proveedor:</span> '+provRow+provDetails+'</div>'
+        + '<hr class="sep">'
+        + '<div class="muted">Resumen:</div>'
+        + '<div class="grid two">'
+        + '<div><span class="badge">EN STOCK</span> '+esc(String(counts.in_stock||0))+'</div>'
+        + '<div><span class="badge">ASIGNADOS</span> '+esc(String(counts.assigned||0))+'</div>'
+        + '<div><span class="badge">REPARACIÓN</span> '+esc(String(counts.in_repair||0))+'</div>'
+        + '<div><span class="badge">BAJA</span> '+esc(String(counts.retired||0))+'</div>'
+        + '</div>'
+        + '</div>'
+        + '<div>'
+        + '<div class="muted" style="margin-bottom:8px;">Unidades (hasta 250)</div>'
+        + '<div class="table-wrap"><table style="min-width:520px;">'
+        + '<thead><tr><th>Serial</th><th>Estado</th><th>Ubicación</th></tr></thead><tbody>';
+
+      units.forEach(u=>{
+        const ser = u.serial ? '<span class="badge mono">'+esc(u.serial)+'</span>' : '<span class="muted">-</span>';
+        const loc = u.status==="ASSIGNED"
+          ? esc((u.sucursal||"-") + (u.area?(" · "+u.area):"") + (u.persona?(" · "+u.persona):""))
+          : '<span class="muted">-</span>';
+        html += '<tr>'
+          + '<td><a href="#" class="js-info" data-kind="unit" data-id="'+esc(String(u.id))+'">'+ser+'</a></td>'
+          + '<td><span class="badge">'+esc(u.status||"")+'</span></td>'
+          + '<td>'+loc+'</td>'
+          + '</tr>';
+      });
+      if(!units.length){
+        html += '<tr><td colspan="3" class="muted">Sin unidades.</td></tr>';
+      }
+      html += '</tbody></table></div>'
+        + '<div class="muted" style="margin:12px 0 6px;">Historial (hasta 250)</div>'
+        + '<div class="table-wrap"><table style="min-width:520px;">'
+        + '<thead><tr><th>Fecha</th><th>Acción</th><th>Serial</th><th>Detalle</th></tr></thead><tbody>';
+
+      hist.forEach(h=>{
+        html += '<tr>'
+          + '<td class="muted">'+esc(shortDate(h.created_at)||"")+'</td>'
+          + '<td><span class="badge">'+esc(h.type||"")+'</span></td>'
+          + '<td>'+(h.serial?('<span class="badge mono">'+esc(h.serial)+'</span>'):'<span class="muted">-</span>')+'</td>'
+          + '<td>'+esc(h.detalle||"")+'</td>'
+          + '</tr>';
+      });
+      if(!hist.length){
+        html += '<tr><td colspan="4" class="muted">Sin historial.</td></tr>';
+      }
+      html += '</tbody></table></div>'
+        + '</div>'
+        + '</div>';
+
+      info.body.innerHTML = html;
+
+      const pl = info.body.querySelector('.prov-link');
+      if(pl){
+        pl.addEventListener('click',(ev)=>{
+          ev.preventDefault();
+          const d = info.body.querySelector('#provDetails');
+          if(d) d.style.display = (d.style.display==='none' || !d.style.display) ? 'block' : 'none';
+        });
+      }
+
+    }catch(err){
+      info.body.innerHTML = '<div class="flash error">Error: '+esc(err.message)+'</div>';
+      info.open();
+    }
+  }
+
+
+
+  // Delegación: cualquier link con .js-info abre modal
+  document.addEventListener("click", (e)=>{
+    const a = e.target.closest(".js-info");
+    if(!a) return;
+    e.preventDefault();
+    const kind = a.dataset.kind;
+    const id = a.dataset.id;
+    if(kind === "unit") openUnitInfo(id);
+    if(kind === "product") openProductInfo(id);
+  });
+</script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

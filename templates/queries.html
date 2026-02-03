@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Consultas" %}
+{% set active="queries" %}
+{% block content %}
+<div class="card">
+  <h2>Consultas + exportación CSV</h2>
+  <div class="muted">Buscá por serial, ubicación, persona, etc. Exportación: productos/unidades/historial.</div>
+  <hr class="sep">
+  <form method="get">
+    <div style="grid-column:1/-1;">
+      <label>Buscar</label>
+      <input name="q" value="{{ q }}" placeholder="Serial, sucursal, persona, marca, modelo, tipo...">
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn" href="{{ url_for('queries_page') }}">Limpiar</a>
+      <a class="btn" href="/export/productos.csv">productos.csv</a>
+      <a class="btn" href="/export/unidades.csv">unidades.csv</a>
+      <a class="btn" href="/export/historial.csv">historial.csv</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Unidades</h2>
+{% if not has_search %}<div class=\"muted\" style=\"margin:8px 0 14px;\">Usá el buscador para mostrar unidades (no se listan todas por defecto).</div>{% endif %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Equipo</th><th>Estado</th><th>Serial</th><th>Garantía</th><th>Ubicación</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for u in units %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><b>{{ u.descripcion }}</b></a><div class="muted">{{ u.marca }} {{ u.modelo }} · {{ u.tipo }}</div></td>
+          <td>
+            {% if u.status=='IN_STOCK' %}<span class="badge ok">EN STOCK</span>{% endif %}
+            {% if u.status=='ASSIGNED' %}<span class="badge blue">ASIGNADO</span>{% endif %}
+            {% if u.status=='IN_REPAIR' %}<span class="badge warn">REPARACIÓN</span>{% endif %}
+            {% if u.status=='RETIRED' %}<span class="badge danger">BAJA</span>{% endif %}
+          </td>
+          <td>{% if u.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><span class="badge mono">{{ u.serial }}</span></a>{% else %}<span class="muted">SIN SERIAL</span>{% endif %}</td>
+          <td>{% if u.warranty_until %}<span class="badge">{{ u.warranty_until }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td class="muted">{{ u.sucursal or "-" }}{% if u.area %} · {{ u.area }}{% endif %}{% if u.persona %} · {{ u.persona }}{% endif %}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">
+            {% if u.status != 'RETIRED' %}
+              <button class="btn danger small" type="button"
+                onclick="modal.open({action:'retire', unitId:'{{ u.id }}', title:'Dar de baja (obligatorio)', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:false, showProv:false});">Baja</button>
+            {% else %}
+              <button class="btn primary small" type="button"
+                onclick="modal.open({action:'restore', unitId:'{{ u.id }}', title:'Reactivar desde BAJA', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:true, showProv:false});">Reactivar</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Historial (últimos 400)</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Equipo</th><th>Serial</th><th>Usuario</th><th>Detalle</th></tr></thead>
+      <tbody>
+        {% for h in hist %}
+        <tr>
+          <td class="muted">{{ short_date(h.created_at) }}</td>
+          <td><span class="badge">{{ h.type }}</span></td>
+          <td><b>{{ h.descripcion }}</b><div class="muted">{{ h.marca }} {{ h.modelo }}</div></td>
+          <td>{% if h.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ h.unit_id }}"><span class="badge mono">{{ h.serial }}</span></a>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td class="muted">{{ h.username }}</td>
+          <td>{{ h.detalle }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

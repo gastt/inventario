@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Reasignar" %}
+{% set active="reassign" %}
+{% block content %}
+<div class="card">
+  <h2>Reasignar (solo ASIGNADOS)</h2>
+  <div class="muted">Cada reasignación exige detalle (para trazabilidad).</div>
+  <hr class="sep">
+  <form method="get">
+    <div style="grid-column:1/-1;">
+      <label>Filtro</label>
+      <input name="q" value="{{ q }}" placeholder="Serial, descripción, marca, sucursal, persona...">
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn" href="{{ url_for('reassign_page') }}">Limpiar</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Equipos asignados</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Equipo</th><th>Serial</th><th>Garantía</th><th>Ubicación actual</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in units %}
+        <tr class="row-click" data-unit="{{ u.id }}">
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><b>{{ u.descripcion }}</b></a><div class="muted">{{ u.marca }} {{ u.modelo }} · {{ u.tipo }}</div></td>
+          <td>{% if u.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><span class="badge mono">{{ u.serial }}</span></a>{% else %}<span class="muted">SIN SERIAL</span>{% endif %}</td>
+          <td>{% if u.warranty_until %}<span class="badge">{{ u.warranty_until }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>
+            <div>{{ u.sucursal or "-" }}</div>
+            <div class="muted">{{ u.area or "" }}{% if u.area and u.persona %} · {% endif %}{{ u.persona or "" }}</div>
+          </td>
+          <td style="white-space:nowrap;">
+            <button class="btn small toggleAct" type="button" data-unit="{{ u.id }}">Acciones ▾</button>
+          </td>
+        </tr>
+        <tr class="actRow" id="act-{{ u.id }}" style="display:none;">
+          <td colspan="5">
+            <div class="card" style="margin:0; box-shadow:none;">
+              <h2 style="margin:0 0 8px 0; font-size:1rem;">Acciones</h2>
+              <form class="rForm" data-unit="{{ u.id }}">
+                <div style="display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                  <div>
+                    <label>Nueva sucursal/ubicación *</label>
+                    <input name="sucursal" required placeholder="Nueva sucursal/ubicación" />
+                  </div>
+                  <div>
+                    <label>Área (opcional)</label>
+                    <input name="area" placeholder="Área (opcional)" />
+                  </div>
+                  <div>
+                    <label>Persona (opcional)</label>
+                    <input name="persona" placeholder="Persona (opcional)" />
+                  </div>
+                  <div>
+                    <label>Nombre PC (opcional)</label>
+                    <input name="pc_name" placeholder="PC-ADMIN-01" />
+                  </div>
+                  <div style="grid-column:1/-1;">
+                    <label>Detalle (obligatorio)</label>
+                    <textarea name="detalle" required placeholder="Detalle obligatorio (motivo)"></textarea>
+                  </div>
+                  <div style="grid-column:1/-1; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn primary small" type="submit">Reasignar</button>
+                    <button class="btn danger small" type="button"
+                      onclick="modal.open({action:'retire', unitId:'{{ u.id }}', title:'Dar de baja (obligatorio)', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or "SIN SERIAL")|e }}', showLoc:false, showProv:false});">Baja</button>
+                    <button class="btn small" type="button" onclick="returnToStock({{ u.id }})">Volver a stock</button>
+                    <button class="btn small" type="button" onclick="openUnitInfo({{ u.id }})">Ver detalle</button>
+                  </div>
+                  <div class="muted msg" style="grid-column:1/-1;"></div>
+                </div>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Toggle action rows
+  document.addEventListener("click", (e)=>{
+    const btn = e.target.closest(".toggleAct");
+    if(!btn) return;
+    const id = btn.dataset.unit;
+    const row = document.getElementById("act-" + id);
+    if(!row) return;
+    row.style.display = (row.style.display === "none" || row.style.display === "") ? "table-row" : "none";
+  });
+
+  async function postForm(url, data){
+    const fd = new FormData();
+    Object.entries(data).forEach(([k,v]) => fd.append(k, v ?? ""));
+    const res = await fetch(url, { method:"POST", body: fd });
+    const js = await res.json().catch(()=> ({}));
+    if (!res.ok || js.ok === false){
+      throw new Error(js.error || ("HTTP " + res.status));
+    }
+    return js;
+  }
+
+  document.querySelectorAll(".rForm").forEach(f => {
+    f.addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const unitId = f.dataset.unit;
+      const msg = f.querySelector(".msg");
+      msg.textContent = "Reasignando...";
+      try{
+        const data = Object.fromEntries(new FormData(f).entries());
+        data.unit_id = unitId;
+        await postForm("/api/reassign", data);
+        msg.textContent = "OK";
+        setTimeout(()=> location.reload(), 350);
+      }catch(err){
+        msg.textContent = "Error: " + err.message;
+      }
+    });
+  });
+
+async function returnToStock(unitId){
+  if(!confirm("¿Volver esta unidad a stock? Quedará disponible para asignar desde el stock.")) return;
+  try{
+    await postForm("/api/return_to_stock/"+unitId, {});
+    try{ toast("Unidad devuelta a stock"); }catch(_){ /* no toast */ }
+    setTimeout(()=>location.reload(), 350);
+  }catch(e){
+    alert("Error: "+e.message);
+  }
+}
+</script>
+{% endblock %}

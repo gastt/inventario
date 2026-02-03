@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Asignar" %}
+{% set active="assign" %}
+{% block content %}
+<div class="grid two">
+  <div class="card">
+    <h2>Asignar equipamiento (descuenta stock)</h2>
+    <div class="muted">Toma unidades en stock (prefiere serializadas). Nota: detalle opcional.</div>
+    <hr class="sep">
+    <form id="aForm">
+      <div style="grid-column:1/-1;">
+        <label>Artículo *</label>
+        <select name="product_id" required>
+          <option value="">Seleccionar...</option>
+          {% for p in products %}
+            <option value="{{ p.id }}">{{ p.descripcion }} ({{ p.marca }} {{ p.modelo }}) · Stock: {{ p.in_stock }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Cantidad *</label>
+        <input name="qty" type="number" min="1" value="1" required>
+      </div>
+      <input type="hidden" name="unit_ids" id="unitIds" value="">
+      <div id="serialPicker" class="card" style="grid-column:1/-1; margin:0; box-shadow:none;">
+        <h2 style="margin:0 0 8px 0; font-size:1rem;">Elegir números de serie (opcional)</h2>
+        <div class="muted" id="serialHint">Seleccioná seriales específicos para asignar exactamente esos equipos. Si no seleccionás nada, se asigna automáticamente por orden.</div>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+  <input id="serialFilter" class="inp" style="flex:1; min-width:220px;" placeholder="Filtrar por Nº de serie...">
+  <span class="muted" id="serialCount"></span>
+</div>
+<div id="serialListWrap" style="margin-top:10px; max-height:260px; overflow-y:auto; padding-right:6px;"></div>
+      </div>
+
+      <div>
+        <label>Sucursal/Ubicación *</label>
+        <input name="sucursal" required placeholder="Sucursal Centro / Cliente X">
+      </div>
+      <div>
+        <label>Área (opcional)</label>
+        <input name="area" placeholder="Administración">
+      </div>
+      <div>
+        <label>Persona (opcional)</label>
+        <input name="persona" placeholder="Juan Pérez">
+      </div>
+      <div>
+        <label>Nombre PC (opcional)</label>
+        <input name="pc_name" placeholder="PC-ADMIN-01">
+      </div>
+      <div style="grid-column:1/-1;">
+        <label>Detalle/nota (opcional)</label>
+        <textarea name="detalle" placeholder="Entregado con cargador, IP, etc."></textarea>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn primary" type="submit">Asignar</button>
+        <span class="muted" id="aMsg"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Tips</h2>
+    <ul class="muted" style="margin:0; padding-left:18px;">
+      <li>Para control fino por serial, podés reasignar luego.</li>
+      <li>Para “enviar a reparación”, usá el panel Reparaciones.</li>
+      <li>Para dar de baja, usá el botón Baja (modal).</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function getJSON(url){
+    const res = await fetch(url);
+    const js = await res.json().catch(()=>({}));
+    if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+    return js;
+  }
+  async function postForm(url, form){
+    const fd = new FormData(form);
+    const res = await fetch(url, {method:"POST", body: fd});
+    const js = await res.json().catch(()=>({}));
+    if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+    return js;
+  }
+
+  const productSel = document.querySelector('select[name="product_id"]');
+  const qtyInput = document.querySelector('input[name="qty"]');
+  const unitIds = document.getElementById("unitIds");
+  const serialPicker = document.getElementById("serialPicker");
+  const serialList = document.getElementById("serialListWrap");
+  const serialFilter = document.getElementById("serialFilter");
+  const serialCount = document.getElementById("serialCount");
+
+  function renderSerials(units){
+    const all = units || [];
+    const term = (serialFilter?.value || "").trim().toLowerCase();
+    const filtered = term ? all.filter(u => (u.serial||"").toLowerCase().includes(term)) : all;
+
+    if(!all.length){
+      serialList.innerHTML = '<div class="muted">No hay unidades serializadas en stock para este artículo (o no hay seriales cargados).</div>';
+      if(serialCount) serialCount.textContent = "";
+      unitIds.value = "";
+      qtyInput.readOnly = false;
+      return;
+    }
+
+    if(serialCount){
+      serialCount.textContent = term ? (`Mostrando ${filtered.length} de ${all.length}`) : (`Total: ${all.length}`);
+    }
+
+    if(!filtered.length){
+      serialList.innerHTML = '<div class="muted">Sin coincidencias para ese serial.</div>';
+      unitIds.value = "";
+      qtyInput.readOnly = false;
+      return;
+    }
+
+    const rows = filtered.map(u => {
+      const w = u.warranty_until ? `<span class="badge">${u.warranty_until}</span>` : `<span class="muted">-</span>`;
+      return `
+        <label style="display:flex; gap:10px; align-items:center; padding:8px 10px; border:1px solid var(--border); border-radius:12px; background: rgba(255,255,255,.03); cursor:pointer; margin-bottom:8px;">
+          <input type="checkbox" class="snChk" value="${u.id}" style="width:auto;">
+          <span class="badge mono">${u.serial}</span>
+          <span class="muted">Garantía:</span> ${w}
+        </label>
+      `;
+    }).join("");
+    serialList.innerHTML = rows;
+
+    const sync = () => {
+      const ids = [...document.querySelectorAll(".snChk:checked")].map(x=>x.value);
+      unitIds.value = ids.join(",");
+      if(ids.length){
+        qtyInput.value = ids.length;
+        qtyInput.readOnly = true;
+      } else {
+        qtyInput.readOnly = false;
+      }
+    };
+    document.querySelectorAll(".snChk").forEach(chk => chk.addEventListener("change", sync));
+    sync();
+  }
+
+  async function refreshSerials(){
+    const pid = productSel.value;
+    if(!pid){
+      serialList.innerHTML = '<div class="muted">Elegí un artículo para ver seriales disponibles.</div>';
+      unitIds.value = "";
+      qtyInput.readOnly = false;
+      return;
+    }
+    try{
+      const js = await getJSON(`/api/in_stock_units/${pid}`);
+      window.__lastUnits = js.units || [];
+      renderSerials(window.__lastUnits);
+    }catch(err){
+      serialList.innerHTML = `<div class="flash error">Error cargando seriales: ${err.message}</div>`;
+    }
+  }
+
+  productSel.addEventListener("change", ()=>{ if(serialFilter) serialFilter.value=''; refreshSerials(); });
+  if(serialFilter){ serialFilter.addEventListener('input', ()=>{ try{ renderSerials(window.__lastUnits||[]);}catch(e){} }); }
+  refreshSerials();
+
+  document.getElementById("aForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const msg = document.getElementById("aMsg");
+    msg.textContent = "Asignando...";
+    try{
+      const js = await postForm("/api/assign", e.target);
+      msg.textContent = "OK. Asignadas: " + js.assigned;
+      setTimeout(()=> location.reload(), 450);
+    }catch(err){
+      msg.textContent = "Error: " + err.message;
+    }
+  });
+</script>
+{% endblock %}

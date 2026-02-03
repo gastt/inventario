@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Stock" %}
+{% set active="stock" %}
+{% block content %}
+<div class="grid two">
+  <div class="card">
+    <h2>Alta / actualización + ingreso a stock</h2>
+    <div class="muted">Podés ingresar por cantidad o por seriales. Garantía opcional (YYYY-MM-DD).</div>
+    <hr class="sep">
+    <form id="pForm">
+      <datalist id="dl_tipos">{% for x in tipos %}<option value="{{ x }}">{% endfor %}</datalist>
+      <datalist id="dl_descripciones">{% for x in descripciones %}<option value="{{ x }}">{% endfor %}</datalist>
+      <datalist id="dl_marcas">{% for x in marcas %}<option value="{{ x }}">{% endfor %}</datalist>
+      <datalist id="dl_modelos">{% for x in modelos %}<option value="{{ x }}">{% endfor %}</datalist>
+      <input type="hidden" name="existing_product_id" value="">
+      <div>
+        <label>Código de barras (opcional)</label>
+        <input name="barcode" placeholder="1234567890123">
+      </div>
+      <div>
+        <label>Descripción *</label>
+        <input name="descripcion" required placeholder="Notebook Dell Latitude 5420" list="dl_descripciones">
+      </div>
+      <div>
+        <label>Tipo *</label>
+        <input name="tipo" required placeholder="Notebook, Monitor, Router..." list="dl_tipos">
+      </div>
+      <div>
+        <label>Marca *</label>
+        <input name="marca" required placeholder="Dell, HP, Cisco..." list="dl_marcas">
+      </div>
+      <div>
+        <label>Modelo *</label>
+        <input name="modelo" required placeholder="Latitude 5420..." list="dl_modelos">
+      </div>
+      <div>
+        <label>Proveedor (opcional)</label>
+        <select name="proveedor_id">
+          <option value="0">(Sin proveedor)</option>
+          {% for pr in providers %}
+            <option value="{{ pr.id }}">{{ pr.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Garantía hasta (opcional)</label>
+        <input name="warranty_until" type="date">
+      </div>
+      <div>
+        <label>Cantidad *</label>
+        <input name="qty" type="number" min="1" value="1" required>
+      </div>
+      <div style="grid-column:1/-1;">
+        <label>Seriales (opcional)</label>
+        <textarea name="serials" placeholder="Uno por línea o separados por coma"></textarea>
+        <div class="muted">Si cargás seriales, la cantidad se toma de esa lista (duplicados se ignoran).</div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn primary" type="submit">Guardar + agregar</button>
+        <span class="muted" id="pMsg"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Buscar</h2>
+    <form method="get">
+      <div style="grid-column:1/-1;">
+        <label>Filtro</label>
+        <input name="q" value="{{ q }}" placeholder="Descripción, marca, modelo, tipo, barcode...">
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" type="submit">Aplicar</button>
+        <a class="btn" href="{{ url_for('stock') }}">Limpiar</a>
+      </div>
+    </form>
+    <hr class="sep">
+    <div class="muted">Exportar: <a href="/export/productos.csv">productos.csv</a> · <a href="/export/unidades.csv">unidades.csv</a> · <a href="/export/historial.csv">historial.csv</a></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Resumen de stock</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Artículo</th><th>Tipo</th><th>Marca/Modelo</th><th>Barcode</th>
+          <th>En stock</th><th>Asignado</th><th>Reparación</th><th>Baja</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        {% if (p.in_stock or 0) > 0 %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="product" data-id="{{ p.id }}"><b>{{ p.descripcion }}</b></a><div class="muted">ID {{ p.id }}</div></td>
+          <td>{{ p.tipo }}</td>
+          <td>{{ p.marca }} <span class="muted">{{ p.modelo }}</span></td>
+          <td>{% if p.barcode %}<span class="badge mono">{{ p.barcode }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td><span class="badge ok">{{ p.in_stock or 0 }}</span></td>
+          <td><span class="badge blue">{{ p.assigned or 0 }}</span></td>
+          <td><span class="badge warn">{{ p.in_repair or 0 }}</span></td>
+          <td><span class="badge danger">{{ p.retired or 0 }}</span></td>
+          <td>
+            <button class="btn danger btn-sm js-del" data-id="{{ p.id }}" data-desc="{{ p.descripcion|e }}">Eliminar</button>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function postForm(url, form){
+  const fd = new FormData(form);
+  const res = await fetch(url, {method:"POST", body: fd});
+  const js = await res.json().catch(()=>({}));
+  if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+  return js;
+}
+
+async function postKV(url, data){
+  const fd = new FormData();
+  Object.entries(data||{}).forEach(([k,v])=> fd.append(k, v ?? ""));
+  const res = await fetch(url, { method:"POST", body: fd });
+  const js = await res.json().catch(()=> ({}));
+  if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+  return js;
+}
+
+document.getElementById("pForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const msg = document.getElementById("pMsg");
+  msg.textContent = "Guardando...";
+  try{
+    const js = await postForm("/api/product_add", e.target);
+    msg.textContent = "OK. Unidades creadas: " + js.created;
+    setTimeout(()=> location.reload(), 400);
+  }catch(err){
+    msg.textContent = "Error: " + err.message;
+  }
+});
+
+// js-del-delegation
+document.addEventListener("click", async (e)=>{
+  const btn = e.target.closest(".js-del");
+  if(!btn) return;
+  e.preventDefault();
+  const id = btn.dataset.id;
+  const desc = btn.dataset.desc || ("ID " + id);
+  if(!confirm("¿Eliminar el artículo '" + desc + "'?\n\nSolo se permite si NO hay unidades asignadas/en reparación/baja.")) return;
+  try{
+    await postKV("/api/product_delete", { product_id: id });
+    location.reload();
+  }catch(err){
+    alert("Error: " + err.message);
+  }
+});
+
+
+// barcode-autofill-v3: si el barcode existe, decide según proveedor (mismo barcode + distinto proveedor = artículo distinto)
+(()=>{
+  const form = document.getElementById("pForm");
+  if(!form) return;
+  const bc = form.querySelector('input[name="barcode"]');
+  const existingId = form.querySelector('input[name="existing_product_id"]');
+  const desc = form.querySelector('input[name="descripcion"]');
+  const tipo = form.querySelector('input[name="tipo"]');
+  const marca = form.querySelector('input[name="marca"]');
+  const modelo = form.querySelector('input[name="modelo"]');
+  const prov = form.querySelector('select[name="proveedor_id"]');
+  const warr = form.querySelector('input[name="warranty_until"]');
+  const serials = form.querySelector('textarea[name="serials"]');
+  const msg = document.getElementById("pMsg");
+
+  let last = "";
+  let lastMatches = [];
+
+  function fillFrom(m){
+    if(!m) return;
+    if(desc) desc.value = m.descripcion || "";
+    if(tipo) tipo.value = m.tipo || "";
+    if(marca) marca.value = m.marca || "";
+    if(modelo) modelo.value = m.modelo || "";
+  }
+
+  function chooseExisting(){
+    const pid = prov ? String(prov.value||"0") : "0";
+    const match = lastMatches.find(x => String(x.proveedor_id||0) === pid);
+    if(match){
+      existingId.value = String(match.id);
+      if(msg) msg.textContent = "Barcode existente para este proveedor: se sumarán unidades al artículo existente.";
+      return;
+    }
+    existingId.value = "";
+    if(lastMatches.length){
+      if(msg){
+        const pnames = [...new Set(lastMatches.map(x=> x.proveedor_nombre || "(sin proveedor)"))].join(", ");
+        msg.textContent = "Barcode existente, pero con otro proveedor ("+pnames+"). Se creará un artículo NUEVO para el proveedor seleccionado.";
+      }
+    }else{
+      if(msg) msg.textContent = "";
+    }
+  }
+
+  async function lookup(){
+    const code = (bc?.value||"").trim();
+    if(!code || code===last) return;
+    last = code;
+    try{
+      const res = await fetch("/api/product_by_barcode?barcode=" + encodeURIComponent(code));
+      const js = await res.json().catch(()=> ({}));
+      if(!res.ok || js.ok===false) return;
+      if(js.found && Array.isArray(js.matches) && js.matches.length){
+        lastMatches = js.matches;
+        fillFrom(js.matches[0]);
+        chooseExisting();
+      }else{
+        lastMatches = [];
+        existingId.value = "";
+        if(msg) msg.textContent = "";
+      }
+    }catch(e){}
+  }
+
+  bc?.addEventListener("change", lookup);
+  bc?.addEventListener("blur", lookup);
+  prov?.addEventListener("change", chooseExisting);
+
+  form.addEventListener("submit", async (e)=>{
+    if(!existingId.value) return;
+    e.preventDefault();
+    try{
+      await postKV("/api/product_add_units", {
+        product_id: existingId.value,
+        purchase_provider_id: prov ? prov.value : "0",
+        warranty_until: warr ? warr.value : "",
+        serials: serials ? serials.value : ""
+      });
+      alert("OK: se agregaron unidades al artículo existente.");
+      location.reload();
+    }catch(err){
+      alert("Error: " + err.message);
+    }
+  });
+})();
+
+</script>
+{% endblock %}

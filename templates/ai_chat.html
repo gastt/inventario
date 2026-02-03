@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% block content %}
+<h2>Chat IA (Local)</h2>
+<div class="card">
+  <div class="muted">
+    Escribí tu consulta en español. El sistema responde siempre con un resumen y (si aplica) una tabla.
+    Usa lógica local robusta para preguntas comunes como “qué hay en reparación”.
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <div class="row" style="gap:10px; align-items:flex-end;">
+    <div style="flex:1; min-width:260px;">
+      <label>Pregunta</label>
+      <input class="inp" id="aiQ" placeholder="Ej: ¿qué hay en reparación? / equipos asignados / bajas / stock" />
+    </div>
+    <div>
+      <button class="btn primary" type="button" onclick="askAi()">Preguntar</button>
+      <button class="btn" type="button" onclick="clearAi()">Limpiar</button>
+    </div>
+  </div>
+
+  <div id="aiAns" style="margin-top:12px;"></div>
+  <div id="aiSqlWrap" style="margin-top:10px; display:none;"></div>
+  <div id="aiTbl" style="margin-top:10px;"></div>
+</div>
+
+<script>
+function clearAi(){
+  document.getElementById("aiQ").value="";
+  document.getElementById("aiAns").innerHTML="";
+  document.getElementById("aiTbl").innerHTML="";
+  document.getElementById("aiSqlWrap").style.display="none";
+  document.getElementById("aiSqlWrap").innerHTML="";
+}
+
+async function askAi(){
+  const q = (document.getElementById("aiQ").value || "").trim();
+  if(!q){ alert("Escribí una consulta."); return; }
+
+  document.getElementById("aiAns").innerHTML = "<span class='muted'>Consultando...</span>";
+  document.getElementById("aiTbl").innerHTML = "";
+  document.getElementById("aiSqlWrap").style.display="none";
+  document.getElementById("aiSqlWrap").innerHTML="";
+
+  try{
+    const fd = new FormData();
+    fd.append("q", q);
+    const res = await fetch("/api/ai/chat", {method:"POST", body: fd});
+    const js = await res.json().catch(()=>({}));
+    if(!res.ok || js.ok===false){
+      document.getElementById("aiAns").innerHTML = "<b>Error:</b> "+esc(js.error || ("HTTP "+res.status));
+      return;
+    }
+
+    const answer = js.answer || "Listo.";
+    document.getElementById("aiAns").innerHTML = "<b>Respuesta:</b> " + esc(answer);
+
+    if(js.sql){
+      document.getElementById("aiSqlWrap").style.display="block";
+      document.getElementById("aiSqlWrap").innerHTML = `
+        <details>
+          <summary>Ver consulta (SQL)</summary>
+          <pre class="mono" style="white-space:pre-wrap; margin-top:8px;">${esc(js.sql)}</pre>
+        </details>`;
+    }
+
+    const rows = js.rows || [];
+    if(!rows.length){
+      document.getElementById("aiTbl").innerHTML = "<div class='muted'>Sin resultados.</div>";
+      return;
+    }
+
+    const cols = Object.keys(rows[0]);
+    let html = "<div class='table-wrap'><table><thead><tr>"+cols.map(c=>"<th>"+esc(c)+"</th>").join("")+"</tr></thead><tbody>";
+    for(const r of rows){
+      html += "<tr>"+cols.map(c=>"<td>"+esc(r[c]===null? "" : String(r[c]))+"</td>").join("")+"</tr>";
+    }
+    html += "</tbody></table></div>";
+    document.getElementById("aiTbl").innerHTML = html;
+  }catch(e){
+    document.getElementById("aiAns").innerHTML = "<b>Error:</b> "+esc(e.message || String(e));
+  }
+}
+
+document.addEventListener("keydown", (e)=>{
+  if(e.key==="Enter" && document.activeElement && document.activeElement.id==="aiQ"){
+    e.preventDefault();
+    askAi();
+  }
+});
+</script>
+{% endblock %}

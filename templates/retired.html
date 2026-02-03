@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Bajas" %}
+{% set active="retired" %}
+{% block content %}
+<div class="grid two">
+  <div class="card">
+    <h2>Dar de baja (buscar unidad + motivo)</h2>
+    <div class="muted">Podés dar de baja desde este panel (además de desde otros paneles).</div>
+    <hr class="sep">
+    <form id="retireFindForm">
+      <div style="grid-column:1/-1;">
+        <label>Buscar por serial o texto</label>
+        <input id="rfQ" placeholder="Ej: SN123 / Latitude / Sucursal Centro">
+        <div class="muted">Busca en unidades (stock/asignadas/reparación). Para dar de baja, elegí una de la lista.</div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" type="submit">Buscar</button>
+        <span class="muted" id="rfMsg"></span>
+      </div>
+    </form>
+    <div id="rfResults" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="card">
+    <h2>Buscar en bajas</h2>
+    <form method="get">
+      <div style="grid-column:1/-1;">
+        <label>Filtro</label>
+        <input name="q" value="{{ q }}" placeholder="Serial, descripción, marca, último lugar...">
+      <div class="grid two" style="margin-top:10px;">
+        <div><label>Desde</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+        <div><label>Hasta</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+      </div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn" type="submit">Aplicar</button>
+        <a class="btn" href="{{ url_for('retired_page') }}">Limpiar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Equipos dados de baja</h2>
+  <div class="muted">Para reactivar: botón “Reactivar” (detalle obligatorio).</div>
+  <hr class="sep">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Equipo</th><th>Serial</th><th>Última asignación</th><th>Garantía</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for u in units %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><b>{{ u.descripcion }}</b></a><div class="muted">{{ u.marca }} {{ u.modelo }} · {{ u.tipo }}</div></td>
+          <td>{% if u.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><span class="badge mono">{{ u.serial }}</span></a>{% else %}<span class="muted">SIN SERIAL</span>{% endif %}</td>
+          <td class="muted">{{ u.last_sucursal or "-" }}{% if u.last_area %} · {{ u.last_area }}{% endif %}{% if u.last_persona %} · {{ u.last_persona }}{% endif %}</td>
+          <td>{% if u.warranty_until %}<span class="badge">{{ u.warranty_until }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>
+            <button class="btn primary small" type="button"
+              onclick="modal.open({action:'restore', unitId:'{{ u.id }}', title:'Reactivar desde BAJA', sub:'<b>{{ u.descripcion|e }}</b> · {{ (u.serial or 'SIN SERIAL')|e }}', showLoc:true, showProv:false});">Reactivar</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function searchUnits(q){
+  const [unitsCsv, prodCsv] = await Promise.all([
+    fetch("/export/unidades.csv").then(r=>r.text()),
+    fetch("/export/productos.csv").then(r=>r.text())
+  ]);
+  function parseCSV(text){
+    const lines = text.split(/\n/).filter(Boolean);
+    const header = lines[0].split(",");
+    return lines.slice(1).map(line=>{
+      const cols = line.split(",");
+      const obj = {};
+      header.forEach((h,i)=> obj[h]=cols[i]||"");
+      return obj;
+    });
+  }
+  const units = parseCSV(unitsCsv);
+  const prods = parseCSV(prodCsv);
+  const pm = new Map(prods.map(p=> [p.id, p]));
+  const qq = (q||"").trim().toLowerCase();
+  return units
+    .filter(u => u.status !== "RETIRED")
+    .map(u => ({...u, p: pm.get(u.product_id) || {}}))
+    .filter(u => {
+      const hay = `${u.serial||""} ${u.status||""} ${(u.p.descripcion||"")} ${(u.p.marca||"")} ${(u.p.modelo||"")} ${(u.p.tipo||"")} ${u.sucursal||""} ${u.area||""} ${u.persona||""}`.toLowerCase();
+      return !qq || hay.includes(qq);
+    })
+    .slice(0, 25);
+}
+
+document.getElementById("retireFindForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const q = document.getElementById("rfQ").value;
+  const msg = document.getElementById("rfMsg");
+  const box = document.getElementById("rfResults");
+  msg.textContent = "Buscando...";
+  box.innerHTML = "";
+  try{
+    const list = await searchUnits(q);
+    msg.textContent = list.length ? `Resultados: ${list.length}` : "Sin resultados.";
+    if(!list.length) return;
+
+    let html = `<div class="table-wrap"><table style="min-width:760px;"><thead><tr>
+      <th>Equipo</th><th>Estado</th><th>Serial</th><th>Ubicación</th><th>Acción</th>
+    </tr></thead><tbody>`;
+    for (const u of list){
+      const estado = u.status === "IN_STOCK" ? `<span class="badge ok">EN STOCK</span>` :
+                     u.status === "ASSIGNED" ? `<span class="badge blue">ASIGNADO</span>` :
+                     `<span class="badge warn">REPARACIÓN</span>`;
+      const serial = u.serial ? `<span class="badge mono">${u.serial}</span>` : `<span class="muted">SIN SERIAL</span>`;
+      const loc = u.sucursal ? `${u.sucursal}${u.area? " · "+u.area:""}${u.persona? " · "+u.persona:""}` : "-";
+      html += `<tr>
+        <td><b>${(u.p.descripcion||"")}</b><div class="muted">${(u.p.marca||"")} ${(u.p.modelo||"")}</div></td>
+        <td>${estado}</td>
+        <td>${serial}</td>
+        <td class="muted">${loc}</td>
+        <td><button class="btn danger small" type="button"
+          onclick="modal.open({action:'retire', unitId:'${u.id}', title:'Dar de baja (obligatorio)', sub:'<b>${(u.p.descripcion||"")}</b> · ${(u.serial||"SIN SERIAL")}', showLoc:false, showProv:false});">Dar de baja</button></td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+    box.innerHTML = html;
+  }catch(err){
+    msg.textContent = "Error: " + err.message;
+  }
+});
+</script>
+{% endblock %}

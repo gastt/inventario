@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Asignados" %}
+{% set active="assigned" %}
+{% block content %}
+<div class="card">
+  <h2>Equipos asignados</h2>
+  <div class="muted">Filtrá por tipo/marca/modelo/descripcion/serial y por rango de fechas. Si cargás fechas, se muestran todos los asignados en ese lapso aunque los demás filtros estén vacíos.</div>
+  <hr class="sep">
+  <form method="get">
+    <div style="grid-column:1/-1;">
+      <label>Búsqueda (descripcion o serial)</label>
+      <input name="q" value="{{ q }}" placeholder="Ej: notebook, impresora, ABC123...">
+    </div>
+
+    <div class="grid two" style="margin-top:10px;">
+      <div>
+        <label>Tipo</label>
+        <select name="tipo">
+          <option value="">(Todos)</option>
+          {% for t in tipos %}
+            <option value="{{ t }}" {% if tipo==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Marca</label>
+        <input name="marca" value="{{ marca }}" placeholder="Dell, HP, Lenovo...">
+      </div>
+      <div>
+        <label>Modelo</label>
+        <input name="modelo" value="{{ modelo }}" placeholder="G6, M720, 840 G5...">
+      </div>
+      <div>
+        <label>Nombre PC</label>
+        <input name="pc" value="{{ pc }}" placeholder="PC-ADMIN-01">
+      </div>
+      <div>
+        <label>Desde</label>
+        <input type="date" name="from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label>Hasta</label>
+        <input type="date" name="to" value="{{ date_to or '' }}">
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+      </div><div class="form-actions" style="margin-top:10px;"><button class="btn" type="submit">Aplicar</button>
+      <a class="btn" href="{{ url_for('assigned_page') }}">Limpiar</a></div><div>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Listado</h2>
+  <div class="table-wrap">
+    <table style="min-width:980px;">
+      <thead>
+        <tr>
+          <th>Equipo</th><th>Serial</th><th>Tipo</th><th>Marca/Modelo</th><th>Ubicación</th><th>Nombre PC</th><th>Fecha asignación</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in rows %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><b>{{ u.descripcion }}</b></a><div class="muted">ID {{ u.id }}</div></td>
+          <td>{% if u.serial %}<a href="#" class="js-info" data-kind="unit" data-id="{{ u.id }}"><span class="badge mono">{{ u.serial }}</span></a>{% else %}<span class="muted">SIN SERIAL</span>{% endif %}</td>
+          <td>{{ u.tipo }}</td>
+          <td>{{ u.marca }} <span class="muted">{{ u.modelo }}</span></td>
+          <td>
+            <div>{{ u.sucursal or "-" }}</div>
+            <div class="muted">{{ u.area or "" }}{% if u.area and u.persona %} · {% endif %}{{ u.persona or "" }}</div>
+          </td>
+          <td>{{ u.pc_name or "-" }}</td>
+          <td class="muted">{{ short_date(u.assigned_at or "-") }}</td>
+        </tr>
+        {% endfor %}
+        {% if not rows %}
+        <tr><td colspan="7" class="muted">Sin resultados.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

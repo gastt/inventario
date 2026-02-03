@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% block content %}
+<h2>Inventario</h2>
+<div class="card">
+  <div class="muted">Buscá una unidad por Serial, descripción, barcode, etc. Luego asignale tu Nº de inventario (editable). Para evitar listados enormes, no muestra nada hasta que busques.</div>
+  <form method="get" class="row" style="gap:10px; flex-wrap:wrap; margin-top:10px;">
+    <input class="inp" name="q" placeholder="Texto (descripción/tipo/marca/modelo)" value="{{ q }}" style="min-width:260px;">
+    <input class="inp" name="serial" placeholder="Serial" value="{{ serial }}" style="width:160px;">
+    <input class="inp" name="barcode" placeholder="Barcode" value="{{ barcode }}" style="width:160px;">
+    <input class="inp" name="inv" placeholder="Nº inventario" value="{{ inv }}" style="width:160px;">
+    <select class="inp" name="status" style="width:160px;">
+      <option value="">Estado (cualquiera)</option>
+      {% for s in ["IN_STOCK","ASSIGNED","IN_REPAIR","DISPOSED"] %}
+        <option value="{{s}}" {% if status==s %}selected{% endif %}>{{s}}</option>
+      {% endfor %}
+    </select>
+    <button class="btn primary" type="submit">Buscar</button>
+    <a class="btn" href="/inventory">Limpiar</a>
+  </form>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <div class="muted">Resultados (máx 500). Click en una fila para abrir el modal de la unidad.</div>
+  <div class="table-wrap" style="margin-top:10px;">
+    <table style="min-width:1180px;">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nº inventario</th>
+          <th>Serial</th>
+          <th>Descripción</th>
+          <th>Tipo</th>
+          <th>Marca</th>
+          <th>Modelo</th>
+          <th>Barcode</th>
+          <th>Proveedor</th>
+          <th>Estado</th>
+          <th>Ubicación</th>
+          <th>Nombre PC</th>
+          <th style="width:140px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% if not (q or serial or barcode or inv or status) %}
+        <tr><td colspan="13" class="muted">Ingresá algún filtro y presioná Buscar.</td></tr>
+      {% elif not rows %}
+        <tr><td colspan="13" class="muted">Sin resultados.</td></tr>
+      {% else %}
+        {% for r in rows %}
+        <tr onclick="openUnitInfo({{ r.unit_id }});" style="cursor:pointer;">
+          <td class="mono">{{ r.unit_id }}</td>
+          <td class="mono">{{ r.inventory_number or "-" }}</td>
+          <td class="mono">{{ r.serial or "-" }}</td>
+          <td><b>{{ r.descripcion }}</b></td>
+          <td>{{ r.tipo }}</td>
+          <td>{{ r.marca }}</td>
+          <td>{{ r.modelo }}</td>
+          <td class="mono">{{ r.barcode or "-" }}</td>
+          <td>{{ r.proveedor_nombre or "-" }}</td>
+          <td><span class="badge">{{ r.status }}</span></td>
+          <td>{{ (r.sucursal or "-") ~ " · " ~ (r.area or "-") ~ " · " ~ (r.persona or "-") }}</td>
+          <td class="mono">{{ r.pc_name or "-" }}</td>
+          <td onclick="event.stopPropagation();" style="white-space:nowrap;">
+            <button class="btn small" type="button" onclick="editInv({{ r.unit_id }}, '{{ (r.inventory_number or '')|e }}')">Editar</button>
+          </td>
+        </tr>
+        {% endfor %}
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<dialog id="invDlg" style="max-width:520px; width:95%;">
+  <form method="dialog" class="card" style="margin:0;">
+    <h3 style="margin-top:0;">Editar Nº de inventario</h3>
+    <div class="muted" id="invDlgSub" style="margin-bottom:10px;"></div>
+    <input class="inp mono" id="invInput" placeholder="Ej: INV-000123">
+    <div class="row" style="gap:10px; justify-content:flex-end; margin-top:12px;">
+      <button class="btn" value="cancel">Cancelar</button>
+      <button class="btn primary" id="invSaveBtn" value="ok">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+async function postKV(url, data){
+  const fd = new FormData();
+  Object.entries(data||{}).forEach(([k,v])=> fd.append(k, v ?? ""));
+  const res = await fetch(url, {method:"POST", body: fd});
+  const js = await res.json().catch(()=>({}));
+  if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+  return js;
+}
+
+let __invUnitId = null;
+function editInv(unitId, current){
+  __invUnitId = unitId;
+  const dlg = document.getElementById("invDlg");
+  document.getElementById("invDlgSub").textContent = "Unidad ID: " + unitId;
+  const inp = document.getElementById("invInput");
+  inp.value = current || "";
+  dlg.showModal();
+  setTimeout(()=>inp.focus(), 50);
+}
+
+document.getElementById("invSaveBtn").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  if(!__invUnitId) return;
+  try{
+    await postKV("/api/unit_inventory_update/" + __invUnitId, {inventory_number: document.getElementById("invInput").value});
+    document.getElementById("invDlg").close();
+    location.reload();
+  }catch(err){
+    alert("Error: " + err.message);
+  }
+});
+</script>
+{% endblock %}

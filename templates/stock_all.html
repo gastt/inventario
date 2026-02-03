@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Resumen stock" %}
+{% set active="stock_all" %}
+{% block content %}
+<div class="card">
+  <h2>Resumen de stock (todo)</h2>
+  <div class="muted">Acá aparecen todos los artículos aunque estén en 0 stock. Click en un artículo para ver ubicación/estado de cada unidad.</div>
+  <hr class="sep">
+  <form method="get">
+    <div style="grid-column:1/-1;">
+      <label>Buscar</label>
+      <input name="q" value="{{ q }}" placeholder="Descripción, marca, modelo, tipo, barcode...">
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn" href="{{ url_for('stock_all') }}">Limpiar</a>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h2>Artículos</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Artículo</th><th>Tipo</th><th>Marca/Modelo</th><th>Barcode</th>
+          <th>En stock</th><th>Asignado</th><th>Reparación</th><th>Baja</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        <tr>
+          <td><a href="#" class="js-info" data-kind="product" data-id="{{ p.id }}"><b>{{ p.descripcion }}</b></a><div class="muted">ID {{ p.id }}</div></td>
+          <td>{{ p.tipo }}</td>
+          <td>{{ p.marca }} <span class="muted">{{ p.modelo }}</span></td>
+          <td>{% if p.barcode %}<span class="badge mono">{{ p.barcode }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td><span class="badge ok">{{ p.in_stock or 0 }}</span></td>
+          <td><span class="badge blue">{{ p.assigned or 0 }}</span></td>
+          <td><span class="badge warn">{{ p.in_repair or 0 }}</span></td>
+          <td><span class="badge danger">{{ p.retired or 0 }}</span></td>
+          <td style="white-space:nowrap;">
+            {% if me.is_admin %}
+              <button class="btn small js-edit-product" type="button" data-id="{{ p.id }}">Editar</button>
+            {% else %}<span class="muted">-</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.addEventListener("click",(e)=>{
+  const b = e.target.closest(".js-edit-product");
+  if(!b) return;
+  e.preventDefault();
+  openProductEdit(b.dataset.id);
+});
+</script>
+{% endblock %}

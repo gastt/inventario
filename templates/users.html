@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% set title="Usuarios" %}
+{% set active="users" %}
+{% block content %}
+<div class="grid two">
+  <div class="card">
+    <h2>Crear usuario</h2>
+    <div class="muted">Solo admin. Las contraseñas se guardan hasheadas.</div>
+    <hr class="sep">
+    <form method="post">
+      <input type="hidden" name="action" value="create">
+      <div>
+        <label>Usuario *</label>
+        <input name="username" required placeholder="gaston">
+      </div>
+      <div>
+        <label>Contraseña *</label>
+        <input name="password" type="password" required placeholder="••••••••">
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <label style="margin:0; display:flex; gap:8px; align-items:center;">
+          <input type="checkbox" name="is_admin">
+          <span class="muted">Admin</span>
+        </label>
+      </div>
+      <div>
+        <button class="btn primary" type="submit">Crear</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Usuarios existentes</h2>
+    <div class="muted">Cambiar contraseña o eliminar.</div>
+    <hr class="sep">
+    <div class="table-wrap" style="min-width:0;">
+      <table style="min-width: 740px;">
+        <thead><tr><th>Usuario</th><th>Admin</th><th>Creado</th><th>Acciones</th></tr></thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td><b>{{ u.username }}</b><div class="muted">ID {{ u.id }}</div></td>
+            <td>{% if u.is_admin %}<span class="badge ok">Sí</span>{% else %}<span class="muted">No</span>{% endif %}</td>
+            <td class="muted">{{ short_date(u.created_at) }}</td>
+            <td style="display:flex; gap:10px; flex-wrap:wrap;">
+              <form method="post" style="display:flex; gap:8px; align-items:center;">
+                <input type="hidden" name="action" value="passwd">
+                <input type="hidden" name="user_id" value="{{ u.id }}">
+                <input name="password" type="password" placeholder="Nueva contraseña" required>
+                <button class="btn small" type="submit">Cambiar</button>
+              </form>
+              <form method="post" onsubmit="return confirm('¿Eliminar usuario {{ u.username }}?');">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="user_id" value="{{ u.id }}">
+                <button class="btn danger small" type="submit">Eliminar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="muted" style="margin-top:10px;">
+      Recomendación: cambiá la contraseña de <span class="badge mono">admin</span>.
+    </div>
+  </div>
+</div>
+{% endblock %}

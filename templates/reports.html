@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% block content %}
+<h2>Reportes</h2>
+
+<div class="card">
+  <form method="get" class="row" style="gap:10px; flex-wrap:wrap;">
+    <div>
+      <label>Tipo de reporte</label>
+      <select class="inp" name="type">
+        <option value="assign" {% if rtype=='assign' %}selected{% endif %}>Asignaciones</option>
+        <option value="reasign" {% if rtype=='reasign' %}selected{% endif %}>Reasignaciones</option>
+        <option value="bajas" {% if rtype=='bajas' %}selected{% endif %}>Bajas</option>
+        <option value="reparaciones" {% if rtype=='reparaciones' %}selected{% endif %}>Reparaciones (envíos)</option>
+        <option value="hist_rep" {% if rtype=='hist_rep' %}selected{% endif %}>Historial de reparaciones</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Desde</label>
+      <input class="inp" type="date" name="from" value="{{date_from}}">
+    </div>
+    <div>
+      <label>Hasta</label>
+      <input class="inp" type="date" name="to" value="{{date_to}}">
+    </div>
+
+    <div>
+      <label>Buscar (texto)</label>
+      <input class="inp" name="q" value="{{q}}" placeholder="Descripción/tipo/marca/modelo/barcode/serial">
+    </div>
+
+    <div>
+      <label>Serial</label>
+      <input class="inp" name="serial" value="{{serial}}" placeholder="SN123">
+    </div>
+    <div>
+      <label>Barcode</label>
+      <input class="inp" name="barcode" value="{{barcode}}" placeholder="Código de barras">
+    </div>
+
+    <div>
+      <label>Tipo</label>
+      <select class="inp" name="tipo">
+        <option value="">(cualquiera)</option>
+        {% for t in tipos %}
+          <option value="{{t}}" {% if tipo==t %}selected{% endif %}>{{t}}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label>Marca</label>
+      <input class="inp" name="marca" value="{{marca}}" placeholder="HP, Dell...">
+    </div>
+    <div>
+      <label>Modelo</label>
+      <input class="inp" name="modelo" value="{{modelo}}" placeholder="G6...">
+    </div>
+
+    <div>
+      <label>Sucursal</label>
+      <input class="inp" name="sucursal" value="{{sucursal}}" placeholder="Sucursal...">
+    </div>
+    <div>
+      <label>Área</label>
+      <input class="inp" name="area" value="{{area}}" placeholder="Área...">
+    </div>
+    <div>
+      <label>Persona</label>
+      <input class="inp" name="persona" value="{{persona}}" placeholder="Persona...">
+    </div>
+    <div>
+      <label>Nombre PC</label>
+      <input class="inp" name="pc" value="{{pc}}" placeholder="PC-ADMIN-01">
+    </div>
+
+    <div>
+      <label>Proveedor compra</label>
+      <input class="inp" name="prov_compra" value="{{prov_compra}}" placeholder="Proveedor compra...">
+    </div>
+    <div>
+      <label>Proveedor reparación</label>
+      <input class="inp" name="prov_repar" value="{{prov_repar}}" placeholder="Proveedor reparación...">
+    </div>
+
+    <div class="form-actions" style="margin-top:10px; width:100%; display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Aplicar</button>
+      <a class="btn" href="/reports">Limpiar</a>
+      <button class="btn" type="submit" name="fmt" value="csv">Descargar CSV</button>
+      <button class="btn" type="submit" name="fmt" value="csv">Descargar PDF</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <div class="muted">Vista previa (máx 200). Total encontrado: <b>{{total}}</b></div>
+  <div class="table-wrap" style="margin-top:10px;">
+    <table style="min-width:1200px;">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Acción</th><th>Descripción</th><th>Tipo</th><th>Marca</th><th>Modelo</th>
+          <th>Barcode</th><th>Prov. compra</th><th>Prov. reparación</th>
+          <th>Serial</th><th>Nombre PC</th>
+          <th>Desde</th><th>Hacia</th><th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="mono">{{r.fecha}}</td>
+          <td class="mono">{{r.accion}}</td>
+          <td><b>{{r.descripcion}}</b></td>
+          <td>{{r.tipo}}</td>
+          <td>{{r.marca}}</td>
+          <td>{{r.modelo}}</td>
+          <td class="mono">{{r.barcode or '-'}}</td>
+          <td>{{r.proveedor_compra or '-'}}</td>
+          <td>{{r.proveedor_reparacion or '-'}}</td>
+          <td class="mono">{{r.serial or '-'}}</td>
+          <td class="mono">{{r.pc_name or '-'}}</td>
+          <td>{{(r.from_sucursal ~ ' / ' ~ r.from_area ~ ' / ' ~ r.from_persona)}}</td>
+          <td>{{(r.to_sucursal ~ ' / ' ~ r.to_area ~ ' / ' ~ r.to_persona)}}</td>
+          <td>{{r.detalle}}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="14" class="muted">Sin resultados.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

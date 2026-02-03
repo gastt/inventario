@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "_macros.html" import short_date %}
+{% block content %}
+<h2>Gestionar productos</h2>
+
+<div class="card">
+  <form method="get" class="row" style="gap:10px; flex-wrap:wrap;">
+    <input class="inp" name="q" placeholder="Buscar (desc/tipo/marca/modelo/barcode)" value="{{q}}" style="min-width:260px;">
+    <input class="inp" name="barcode" placeholder="Barcode" value="{{barcode}}" style="width:160px;">
+    <input class="inp" name="serial" placeholder="Serial" value="{{serial}}" style="width:160px;">
+    <input class="inp" name="tipo" placeholder="Tipo" value="{{tipo}}" style="width:160px;">
+    <input class="inp" name="marca" placeholder="Marca" value="{{marca}}" style="width:160px;">
+    <input class="inp" name="modelo" placeholder="Modelo" value="{{modelo}}" style="width:160px;">
+    <select class="inp" name="proveedor_id" style="width:220px;">
+      <option value="">Proveedor (cualquiera)</option>
+      {% for p in providers %}
+        <option value="{{p.id}}" {% if proveedor_id and proveedor_id|int == p.id %}selected{% endif %}>{{p.nombre}}</option>
+      {% endfor %}
+    </select>
+    <button class="btn primary" type="submit">Buscar</button>
+    <a class="btn" href="/manage_products">Limpiar</a>
+  </form>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <div class="muted">Resultados (máx 200). Click en “Unidades” para editar serial o eliminar una unidad.</div>
+  <div class="table-wrap" style="margin-top:10px;">
+    <table style="min-width:980px;">
+      <thead>
+        <tr>
+          <th>ID</th><th>Descripción</th><th>Tipo</th><th>Marca</th><th>Modelo</th><th>Barcode</th><th>Proveedor</th><th>Unidades</th><th>En stock</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in products %}
+        <tr>
+          <td class="mono">{{p.id}}</td>
+          <td><b>{{p.descripcion}}</b></td>
+          <td>{{p.tipo}}</td>
+          <td>{{p.marca}}</td>
+          <td>{{p.modelo}}</td>
+          <td class="mono">{{p.barcode or "-"}}</td>
+          <td>{{p.proveedor_nombre or "-"}}</td>
+          <td class="mono">{{p.unidades or 0}}</td>
+          <td class="mono">{{p.en_stock or 0}}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn small" type="button" onclick="toggleUnits({{p.id}})">Unidades</button>
+          </td>
+        </tr>
+        <tr id="unitsRow-{{p.id}}" style="display:none;">
+          <td colspan="10">
+            <div class="muted" style="margin-bottom:8px;">Unidades / Seriales del producto {{p.id}}</div>
+            <div id="unitsBox-{{p.id}}" class="muted">Cargando…</div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="muted">Sin resultados.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function postKV(url, data){
+  const fd = new FormData();
+  Object.entries(data||{}).forEach(([k,v])=> fd.append(k, v ?? ""));
+  const res = await fetch(url, {method:"POST", body: fd});
+  const js = await res.json().catch(()=>({}));
+  if(!res.ok || js.ok===false) throw new Error(js.error || ("HTTP " + res.status));
+  return js;
+}
+
+async function toggleUnits(pid){
+  const row = document.getElementById("unitsRow-"+pid);
+  const box = document.getElementById("unitsBox-"+pid);
+  if(!row || !box) return;
+  row.style.display = (row.style.display === "none" ? "table-row" : "none");
+  if(row.style.display === "none") return;
+
+  const serialQ = (new URLSearchParams(window.location.search).get("serial")||"").trim();
+  const res = await fetch("/api/product_info/"+pid + (serialQ?("?serial="+encodeURIComponent(serialQ)):""));
+  const js = await res.json().catch(()=>({}));
+  if(!res.ok || js.ok===false){ box.innerHTML = "<span class='muted'>Error cargando</span>"; return; }
+  const units = js.units || [];
+
+  let html = '<div class="table-wrap"><table style="min-width:820px;"><thead><tr>'
+    + '<th>ID</th><th>Serial</th><th>Estado</th><th>Sucursal</th><th>Área</th><th>Persona</th><th style="width:180px;">Acciones</th>'
+    + '</tr></thead><tbody>';
+
+  if(!units.length){
+    html += '<tr><td colspan="7" class="muted">Sin unidades</td></tr>';
+  } else {
+    for(const u of units){
+      html += '<tr>'
+        + '<td class="mono">'+u.id+'</td>'
+        + '<td><input class="inp mono" style="width:220px;" value="'+(u.serial||'')+'" id="ser-'+u.id+'"></td>'
+        + '<td>'+ (u.status||'') +'</td>'
+        + '<td>'+ (u.sucursal||'') +'</td>'
+        + '<td>'+ (u.area||'') +'</td>'
+        + '<td>'+ (u.persona||'') +'</td>'
+        + '<td style="white-space:nowrap;">'
+        + '<button class="btn small" onclick="saveSerial('+u.id+')">Guardar</button> '
+        + '<button class="btn danger small" onclick="deleteUnit('+u.id+')">Eliminar</button>'
+        + '</td>'
+        + '</tr>';
+    }
+  }
+  html += '</tbody></table></div>';
+  box.innerHTML = html;
+}
+
+async function saveSerial(unitId){
+  const inp = document.getElementById("ser-"+unitId);
+  const val = inp ? inp.value : "";
+  try{
+    await postKV("/manage_products/unit/"+unitId+"/update_serial", {serial: val});
+    alert("OK");
+  }catch(e){
+    alert("Error: " + e.message);
+  }
+}
+async function deleteUnit(unitId){
+  if(!confirm("¿Eliminar esta unidad?")) return;
+  try{
+    await postKV("/manage_products/unit/"+unitId+"/delete", {});
+    alert("Eliminada");
+    location.reload();
+  }catch(e){
+    alert("Error: " + e.message);
+  }
+}
+</script>
+{% endblock %}
